@@ -1,0 +1,5 @@
+{
+  "name": "PizzaPalace POS",
+  "description": "A modern point-of-sale interface for creating new pizza orders with an integrated AI-powered pizza recommender.",
+  "requestFramePermissions": []
+}
