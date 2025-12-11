@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import CustomerDetails from './components/CustomerDetails';
 import PizzaBuilder from './components/PizzaBuilder';
+import SidesSection from './components/SidesSection';
 import OrderSummary from './components/OrderSummary';
 import NotesSection from './components/NotesSection';
 import { CustomerDetails as CustomerDetailsType, OrderItem, OrderSummaryState } from './types';
 
+type Section = 'customer' | 'builder' | 'sides';
+
 const App: React.FC = () => {
+  const [activeSection, setActiveSection] = useState<Section>('customer');
+
   const [customer, setCustomer] = useState<CustomerDetailsType>({
     phone: '(555) 123-4567',
     store: 'Downtown',
@@ -73,6 +78,18 @@ const App: React.FC = () => {
     }));
   };
 
+  const toggleSection = (section: Section) => {
+    if (activeSection === section) {
+      // Optional: Allow closing the current section if clicked again, 
+      // or keep it open. Here we keep it open or toggle. 
+      // Let's allow strictly one open, so clicking active does nothing or closes.
+      // Usually in accordion, clicking active closes it.
+      // But for POS, usually one should be open. Let's keep it open if clicked.
+      return; 
+    }
+    setActiveSection(section);
+  };
+
   return (
     <div className="min-h-screen pb-20">
       {/* Header */}
@@ -82,14 +99,24 @@ const App: React.FC = () => {
 
       <main className="max-w-[1400px] mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column - Forms */}
-        <div className="lg:col-span-8">
+        <div className="lg:col-span-8 space-y-4">
           <CustomerDetails 
             details={customer} 
-            onChange={setCustomer} 
+            onChange={setCustomer}
+            isOpen={activeSection === 'customer'}
+            onToggle={() => toggleSection('customer')}
           />
           
           <PizzaBuilder 
-            onAddToOrder={handleAddToOrder} 
+            onAddToOrder={handleAddToOrder}
+            isOpen={activeSection === 'builder'}
+            onToggle={() => toggleSection('builder')}
+          />
+
+          <SidesSection 
+            onAddToOrder={handleAddToOrder}
+            isOpen={activeSection === 'sides'}
+            onToggle={() => toggleSection('sides')}
           />
 
           <NotesSection />

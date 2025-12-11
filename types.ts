@@ -1,4 +1,4 @@
-export type PizzaSize = 'Small' | 'Medium' | 'Large';
+export type PizzaSize = 'Small' | 'Medium' | 'Large' | 'XL';
 export type CrustType = 'Thin' | 'Hand-Tossed' | 'Deep Dish' | 'Gluten-Free' | 'Stuffed' | 'Brooklyn Style';
 export type SauceType = 'Tomato' | 'Marinara' | 'BBQ' | 'Alfredo' | 'Garlic Parm' | 'Buffalo';
 export type SauceAmount = 'Light' | 'Normal' | 'Extra';
@@ -32,7 +32,7 @@ export interface OrderItem {
   description: string;
   price: number;
   quantity: number;
-  config: PizzaConfig;
+  config?: PizzaConfig;
   specialInstructions?: string;
 }
 

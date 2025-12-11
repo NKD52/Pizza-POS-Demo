@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PizzaSize, CrustType, SauceType, PizzaConfig, PizzaTopping } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || '' });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
 export interface AISuggestion {
   name: string;
@@ -28,7 +28,7 @@ export const getCreativePizzaSuggestion = async (): Promise<AISuggestion | null>
           properties: {
             name: { type: Type.STRING },
             description: { type: Type.STRING },
-            size: { type: Type.STRING, enum: ["Small", "Medium", "Large"] },
+            size: { type: Type.STRING, enum: ["Small", "Medium", "Large", "XL"] },
             crust: { type: Type.STRING, enum: ["Thin", "Hand-Tossed", "Deep Dish", "Gluten-Free", "Stuffed", "Brooklyn Style"] },
             sauce: { type: Type.STRING, enum: ["Tomato", "Marinara", "BBQ", "Alfredo", "Garlic Parm", "Buffalo"] },
             toppings: { 
