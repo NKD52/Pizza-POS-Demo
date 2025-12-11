@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { PizzaConfig, Topping, PizzaSize, CrustType, SauceType, OrderItem, SauceAmount, CheeseAmount, CrustSeasoning, PizzaTopping } from '../types';
-import { ShoppingCart, ChevronDown, Pizza, Layers, DollarSign, MessageSquare, ChevronUp } from 'lucide-react';
+import { ShoppingCart, ChevronDown, Pizza, Layers, DollarSign, MessageSquare, ChevronUp, Clock, RefreshCw } from 'lucide-react';
 
 const AVAILABLE_MEATS: Topping[] = ([
   { id: 'm5', name: 'Bacon', category: 'meat', price: 1.50 },
@@ -35,20 +36,39 @@ const AVAILABLE_CHEESES: Topping[] = ([
 const CRUST_OPTIONS: CrustType[] = ['Thin', 'Hand-Tossed', 'Deep Dish', 'Gluten-Free', 'Stuffed', 'Brooklyn Style'];
 const SAUCE_OPTIONS: SauceType[] = ['Tomato', 'Marinara', 'BBQ', 'Alfredo', 'Garlic Parm', 'Buffalo'];
 
-const SPECIALTIES = [
-  { name: 'Meat Lovers', toppings: ['Pepperoni', 'Sausage', 'Bacon', 'Ham', 'Chicken'] },
-  { name: 'Veggie Supreme', toppings: ['Onions', 'Mushrooms', 'Green Peppers', 'Olives', 'Pineapple'] },
-  { name: 'Hawaiian', toppings: ['Ham', 'Pineapple'] },
-  { name: 'BBQ Chicken', toppings: ['Chicken', 'Onions', 'Bacon'] }
+interface Specialty {
+    name: string;
+    toppings: string[];
+    sauce: SauceType;
+}
+
+const SPECIALTIES: Specialty[] = [
+  { name: 'Meat Lovers', toppings: ['Pepperoni', 'Sausage', 'Bacon', 'Ham', 'Chicken'], sauce: 'Tomato' },
+  { name: 'Veggie Supreme', toppings: ['Onions', 'Mushrooms', 'Green Peppers', 'Olives', 'Pineapple'], sauce: 'Tomato' },
+  { name: 'Hawaiian', toppings: ['Ham', 'Pineapple'], sauce: 'Tomato' },
+  { name: 'BBQ Chicken', toppings: ['Chicken', 'Onions', 'Bacon'], sauce: 'BBQ' }
 ];
+
+// Using Partial to allow for "unchecked" states (undefined)
+const BLANK_CONFIG: Partial<PizzaConfig> = {
+  size: undefined,
+  crust: undefined,
+  crustSeasoning: undefined,
+  sauce: undefined,
+  sauceAmount: undefined,
+  cheese: undefined,
+  toppings: []
+};
 
 interface Props {
   onAddToOrder: (item: OrderItem) => void;
   isOpen: boolean;
   onToggle: () => void;
+  defaultTime: string;
+  itemToEdit: OrderItem | null;
 }
 
-const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
+const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle, defaultTime, itemToEdit }) => {
   const [mode, setMode] = useState<'custom' | 'specialty'>('custom');
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>('');
   
@@ -59,22 +79,65 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [customPrice, setCustomPrice] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [itemTime, setItemTime] = useState(defaultTime);
   
-  const [config, setConfig] = useState<PizzaConfig>({
-    size: 'Large',
-    crust: 'Thin',
-    crustSeasoning: 'No Seasoning',
-    sauce: 'Tomato',
-    sauceAmount: 'Normal',
-    cheese: 'Regular',
-    toppings: []
-  });
+  // Sync internal time state when defaultTime changes from parent
+  useEffect(() => {
+    // Only reset time if we aren't editing, or if editing item is null
+    if (!itemToEdit) {
+        setItemTime(defaultTime);
+    }
+  }, [defaultTime, itemToEdit]);
+
+  const [config, setConfig] = useState<Partial<PizzaConfig>>(BLANK_CONFIG);
+
+  // Hydrate state when editing an item
+  useEffect(() => {
+    if (itemToEdit && itemToEdit.config) {
+        // 1. Basic Fields
+        setQuantity(itemToEdit.quantity);
+        setItemTime(itemToEdit.deliveryTime);
+        setSpecialInstructions(itemToEdit.specialInstructions || '');
+        setConfig(itemToEdit.config);
+        
+        // 2. Determine Mode (Custom vs Specialty)
+        // Heuristic: Check if item name contains a known specialty name
+        const foundSpecialty = SPECIALTIES.find(s => itemToEdit.name.includes(s.name));
+        if (foundSpecialty) {
+            setMode('specialty');
+            setSelectedSpecialty(foundSpecialty.name);
+        } else {
+            setMode('custom');
+            setSelectedSpecialty('');
+        }
+
+        // 3. Determine Half & Half Status
+        const hasSplitToppings = itemToEdit.config.toppings.some(t => t.side !== 'whole');
+        setIsHalfAndHalf(hasSplitToppings);
+
+        // 4. Determine Price Override
+        // We calculate what the price *should* be based on config
+        const calculated = calculatePriceInternal(itemToEdit.config as PizzaConfig, itemToEdit.quantity);
+        // If stored price differs significantly from calculated, it was overridden
+        if (Math.abs(itemToEdit.price - calculated) > 0.01) {
+            setCustomPrice(itemToEdit.price.toFixed(2));
+        } else {
+            setCustomPrice('');
+        }
+    } else if (itemToEdit === null) {
+        // Reset if we stop editing (optional, depending on UX preference)
+        // For now, we keep the previous state unless explicitly cleared by a Save action
+        // or we can allow the user to "cancel" edit by closing the toggle, 
+        // but typically we wait for the parent to pass null.
+    }
+  }, [itemToEdit]);
 
   // side can be 'whole', 'left', 'right'
   const toggleTopping = (topping: Topping, sideToToggle: 'whole' | 'left' | 'right' = 'whole') => {
     setConfig(prev => {
-      const existing = prev.toppings.find(t => t.id === topping.id);
-      let newToppings = [...prev.toppings];
+      const currentToppings = prev.toppings || [];
+      const existing = currentToppings.find(t => t.id === topping.id);
+      let newToppings = [...currentToppings];
 
       if (existing) {
         // If we are in 'whole' mode (standard)
@@ -130,56 +193,112 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
     setSelectedSpecialty(specialtyName);
     const specialty = SPECIALTIES.find(s => s.name === specialtyName);
     if (specialty) {
+      // Auto-populate implied fields for specialty, but keep Size/Crust optional if not yet set
       setConfig(prev => ({
         ...prev,
+        sauce: specialty.sauce,
+        sauceAmount: 'Normal',
+        cheese: 'Regular',
+        crustSeasoning: 'No Seasoning',
         toppings: mapToppings(specialty.toppings)
       }));
+    } else if (specialtyName === '') {
+        // Reset if they choose default placeholder
+        setConfig(prev => ({
+            ...prev,
+            toppings: []
+        }));
     }
   };
 
-  const calculatePrice = () => {
+  // Helper for internal calculation (used in useEffect too)
+  const calculatePriceInternal = (cfg: Partial<PizzaConfig>, qty: number) => {
     let base = 0;
-    if (config.size === 'Small') base = 12.00;
-    if (config.size === 'Medium') base = 16.00;
-    if (config.size === 'Large') base = 18.00;
-    if (config.size === 'XL') base = 22.00;
+    if (cfg.size === 'Small') base = 12.00;
+    if (cfg.size === 'Medium') base = 16.00;
+    if (cfg.size === 'Large') base = 18.00;
+    if (cfg.size === 'XL') base = 22.00;
 
-    const toppingsPrice = config.toppings.reduce((acc, t) => {
+    const toppingsPrice = (cfg.toppings || []).reduce((acc, t) => {
         const multiplier = t.side === 'whole' ? 1 : 0.5;
         return acc + (t.price * multiplier);
     }, 0);
-    return (base + toppingsPrice) * quantity;
+    return (base + toppingsPrice) * qty;
+  }
+
+  const calculatePrice = () => {
+    return calculatePriceInternal(config, quantity);
   };
 
   const handleAdd = () => {
+    // Validation
+    if (!config.size) {
+        alert("Please select a pizza size.");
+        return;
+    }
+    if (!config.crust) {
+        alert("Please select a crust type.");
+        return;
+    }
+    if (mode === 'custom' && !config.sauce) {
+        alert("Please select a sauce.");
+        return;
+    }
+    // Specialty usually auto-sets sauce, but if something went wrong:
+    if (mode === 'specialty' && !config.sauce) {
+         // Fallback or alert
+         alert("Please select a valid specialty.");
+         return;
+    }
+
     let finalPrice = calculatePrice();
-    if (mode === 'specialty' && customPrice && !isNaN(parseFloat(customPrice))) {
+    // Use custom price if set, regardless of mode
+    if (customPrice && !isNaN(parseFloat(customPrice))) {
       finalPrice = parseFloat(customPrice);
     }
 
+    // Cast to PizzaConfig now that we validated required fields
+    const safeConfig = {
+        size: config.size!,
+        crust: config.crust!,
+        crustSeasoning: config.crustSeasoning || 'No Seasoning',
+        sauce: config.sauce!,
+        sauceAmount: config.sauceAmount || 'Normal',
+        cheese: config.cheese || 'Regular',
+        toppings: config.toppings || []
+    } as PizzaConfig;
+
     const item: OrderItem = {
-      id: Math.random().toString(36).substr(2, 9),
+      // If editing, preserve ID. If new, generate ID.
+      id: itemToEdit ? itemToEdit.id : Math.random().toString(36).substr(2, 9),
       name: selectedSpecialty && mode === 'specialty' ? `${quantity}x ${config.size} ${selectedSpecialty}` : `${quantity}x ${config.size} Pizza`,
-      description: getDescription(),
+      description: getDescription(safeConfig),
       price: finalPrice,
       quantity: quantity,
-      config: { ...config },
-      specialInstructions: (mode === 'specialty' && specialInstructions) ? specialInstructions : undefined
+      config: safeConfig,
+      specialInstructions: specialInstructions || undefined,
+      deliveryTime: itemTime || defaultTime,
     };
     onAddToOrder(item);
+    
+    // Reset to BLANK State (Uncheck all fields)
     setSpecialInstructions('');
     setCustomPrice('');
     setQuantity(1);
+    setConfig(BLANK_CONFIG);
+    setMode('custom');
+    setSelectedSpecialty('');
+    setIsHalfAndHalf(false);
   };
 
-  const getDescription = () => {
-    let desc = `${config.crust}`;
-    if (mode === 'custom') desc += `, ${config.sauce}`;
+  const getDescription = (cfg: PizzaConfig) => {
+    let desc = `${cfg.crust}`;
+    if (mode === 'custom') desc += `, ${cfg.sauce}`;
     
-    if (config.toppings.length > 0) {
-      const whole = config.toppings.filter(t => t.side === 'whole').map(t => t.name);
-      const left = config.toppings.filter(t => t.side === 'left').map(t => t.name);
-      const right = config.toppings.filter(t => t.side === 'right').map(t => t.name);
+    if (cfg.toppings.length > 0) {
+      const whole = cfg.toppings.filter(t => t.side === 'whole').map(t => t.name);
+      const left = cfg.toppings.filter(t => t.side === 'left').map(t => t.name);
+      const right = cfg.toppings.filter(t => t.side === 'right').map(t => t.name);
       
       const parts = [];
       if (whole.length) parts.push(whole.join(', '));
@@ -197,7 +316,7 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">{title}</span>
         <div className="flex flex-wrap gap-1.5">
           {toppings.map((t) => {
-            const existing = config.toppings.find(sel => sel.id === t.id);
+            const existing = (config.toppings || []).find(sel => sel.id === t.id);
             const isSelected = existing ? (existing.side === 'whole' || existing.side === side) : false;
             
             // Adjust price display for half portions
@@ -244,15 +363,17 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
   );
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div className={`bg-white rounded-lg shadow-sm border transition-colors overflow-hidden ${itemToEdit ? 'border-orange-300 ring-1 ring-orange-200' : 'border-gray-200'}`}>
       <div 
         onClick={onToggle}
-        className="w-full flex justify-between items-center p-4 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
+        className={`w-full flex justify-between items-center p-4 transition-colors cursor-pointer ${itemToEdit ? 'bg-orange-50 hover:bg-orange-100' : 'bg-white hover:bg-gray-50'}`}
       >
         <div className="flex items-center gap-6">
-            <h2 className="text-base font-bold text-gray-900">Pizza Builder</h2>
+            <h2 className={`text-base font-bold ${itemToEdit ? 'text-orange-800' : 'text-gray-900'}`}>
+                {itemToEdit ? 'Edit Pizza' : 'Pizza Builder'}
+            </h2>
             {/* Mode Toggle in Header */}
-            <div className="flex p-0.5 bg-gray-100 rounded-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex p-0.5 bg-white/50 rounded-md" onClick={(e) => e.stopPropagation()}>
                 <button
                     onClick={() => setMode('custom')}
                     className={`flex items-center gap-1.5 py-1 px-3 text-xs font-medium rounded transition-all ${
@@ -296,10 +417,11 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
                             <label className="block text-xs font-medium text-gray-600 mb-1">CRUST</label>
                             <div className="relative">
                                 <select
-                                    value={config.crust}
+                                    value={config.crust || ''}
                                     onChange={(e) => setConfig({ ...config, crust: e.target.value as CrustType })}
                                     className="w-full pl-2 pr-6 py-0 h-8 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 text-xs bg-white"
                                 >
+                                    <option value="" disabled>Select Crust</option>
                                     {CRUST_OPTIONS.map(crust => (
                                         <option key={crust} value={crust}>{crust}</option>
                                     ))}
@@ -312,10 +434,11 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
                             <label className="block text-xs font-medium text-gray-600 mb-1">SEASONING</label>
                             <div className="relative">
                                 <select
-                                    value={config.crustSeasoning}
+                                    value={config.crustSeasoning || ''}
                                     onChange={(e) => setConfig({ ...config, crustSeasoning: e.target.value as CrustSeasoning })}
                                     className="w-full pl-2 pr-6 py-0 h-8 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 text-xs bg-white"
                                 >
+                                    <option value="" disabled>Select Seasoning</option>
                                     {['No Seasoning', 'Garlic Herb'].map(opt => (
                                         <option key={opt} value={opt}>{opt}</option>
                                     ))}
@@ -438,6 +561,38 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
                             </div>
                         )}
                     </div>
+
+                    {/* Instructions & Price Override for Custom Mode */}
+                    <div className="grid grid-cols-12 gap-3 mt-4 pt-4 border-t border-gray-100">
+                        <div className="col-span-8">
+                            <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                                <MessageSquare className="w-3 h-3" />
+                                INSTRUCTIONS
+                            </label>
+                            <textarea
+                                value={specialInstructions}
+                                onChange={(e) => setSpecialInstructions(e.target.value)}
+                                placeholder="Special requests..."
+                                className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 h-9 resize-none overflow-hidden leading-tight"
+                            />
+                        </div>
+                        <div className="col-span-4">
+                            <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                                <DollarSign className="w-3 h-3" />
+                                OVERRIDE
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-2 text-gray-500 text-sm">$</span>
+                                <input
+                                    type="number"
+                                    value={customPrice}
+                                    onChange={(e) => setCustomPrice(e.target.value)}
+                                    placeholder={calculatePrice().toFixed(2)}
+                                    className="w-full pl-6 pr-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 h-9"
+                                />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             ) : (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
@@ -472,10 +627,11 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
                         <label className="block text-xs font-medium text-gray-600 mb-1">SEASONING</label>
                         <div className="relative">
                             <select
-                                value={config.crustSeasoning}
+                                value={config.crustSeasoning || ''}
                                 onChange={(e) => setConfig({ ...config, crustSeasoning: e.target.value as CrustSeasoning })}
                                 className="w-full pl-2 pr-6 py-0 h-9 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 text-xs bg-white"
                             >
+                                <option value="" disabled>Select Seasoning</option>
                                 {['No Seasoning', 'Garlic Herb'].map(opt => (
                                     <option key={opt} value={opt}>{opt}</option>
                                 ))}
@@ -518,14 +674,25 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
                 <div className="bg-gray-50 rounded px-3 py-2 border border-gray-100 text-xs">
                     <span className="font-semibold text-gray-500 uppercase tracking-wider mr-2">Included:</span>
                     <span className="text-gray-700">
-                        {config.toppings.length > 0 ? config.toppings.map(t => t.name).join(', ') : 'No toppings'}
+                        {(config.toppings || []).length > 0 ? config.toppings?.map(t => t.name).join(', ') : 'No toppings'}
                     </span>
                 </div>
                 </div>
             )}
 
             {/* Action Bar */}
-            <div className="flex gap-3 mt-4 pt-3 border-t border-gray-100">
+            <div className={`flex gap-3 mt-4 pt-3 border-t ${itemToEdit ? 'border-orange-200' : 'border-gray-100'}`}>
+                <div className="w-32">
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            value={itemTime} 
+                            onChange={(e) => setItemTime(e.target.value)}
+                            className="w-full h-10 pl-8 pr-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-red-500 bg-white"
+                        />
+                        <Clock className="w-4 h-4 text-gray-400 absolute left-2.5 top-3" />
+                    </div>
+                </div>
                 <div className="w-16">
                     <input
                         type="number"
@@ -537,10 +704,13 @@ const PizzaBuilder: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
                 </div>
                 <button
                     onClick={handleAdd}
-                    className="flex-1 bg-red-600 text-white h-10 rounded-md font-semibold shadow-sm hover:bg-red-700 flex items-center justify-center gap-2 transition-colors text-sm"
+                    className={`flex-1 h-10 rounded-md font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors text-sm ${itemToEdit ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-red-600 text-white hover:bg-red-700'}`}
                 >
-                    <ShoppingCart className="w-4 h-4" />
-                    <span>Add to Order - ${(calculatePrice() * (mode === 'specialty' && customPrice ? 0 : 1) + (mode === 'specialty' && customPrice ? parseFloat(customPrice) : 0)).toFixed(2)}</span>
+                    {itemToEdit ? <RefreshCw className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
+                    <span>
+                        {itemToEdit ? 'Update Order' : 'Add to Order'} 
+                        {' - $'}{(calculatePrice() * (customPrice ? 0 : 1) + (customPrice ? parseFloat(customPrice) : 0)).toFixed(2)}
+                    </span>
                 </button>
             </div>
         </div>

@@ -1,3 +1,4 @@
+
 export type PizzaSize = 'Small' | 'Medium' | 'Large' | 'XL';
 export type CrustType = 'Thin' | 'Hand-Tossed' | 'Deep Dish' | 'Gluten-Free' | 'Stuffed' | 'Brooklyn Style';
 export type SauceType = 'Tomato' | 'Marinara' | 'BBQ' | 'Alfredo' | 'Garlic Parm' | 'Buffalo';
@@ -34,16 +35,15 @@ export interface OrderItem {
   quantity: number;
   config?: PizzaConfig;
   specialInstructions?: string;
+  deliveryTime: string;
 }
 
 export interface CustomerDetails {
-  phone: string;
+  eventName: string;
   store: string;
   organization: string;
   contactName: string;
   email: string;
-  date: string;
-  time: string;
   orderType: 'Delivery' | 'Pickup' | 'Dine-in';
 }
 
@@ -54,4 +54,5 @@ export interface OrderSummaryState {
   discountValue: number;
   discountType: '$' | '%';
   tip: number;
+  totalOverride?: string;
 }

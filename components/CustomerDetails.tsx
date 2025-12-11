@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { CustomerDetails as CustomerDetailsType } from '../types';
-import { Calendar, Clock, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Props {
   details: CustomerDetailsType;
@@ -25,7 +26,7 @@ const CustomerDetails: React.FC<Props> = ({ details, onChange, isOpen, onToggle 
       >
         <div className="flex flex-col items-start">
             <h2 className="text-base font-bold text-gray-900">Customer Details</h2>
-            {!isOpen && <span className="text-xs text-gray-500">{details.contactName || 'No contact'} • {details.phone}</span>}
+            {!isOpen && <span className="text-xs text-gray-500">{details.contactName || 'No contact'} • {details.eventName}</span>}
         </div>
         {isOpen ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
       </button>
@@ -70,7 +71,6 @@ const CustomerDetails: React.FC<Props> = ({ details, onChange, isOpen, onToggle 
               />
             </div>
              
-             {/* Row 2 */}
             <div>
               <label className={labelClasses}>Contact Name</label>
               <input 
@@ -81,12 +81,13 @@ const CustomerDetails: React.FC<Props> = ({ details, onChange, isOpen, onToggle 
               />
             </div>
             
+            {/* Row 2 */}
             <div>
-              <label className={labelClasses}>Contact Phone</label>
+              <label className={labelClasses}>Event Name</label>
               <input 
                 type="text" 
-                value={details.phone}
-                onChange={(e) => handleChange('phone', e.target.value)}
+                value={details.eventName}
+                onChange={(e) => handleChange('eventName', e.target.value)}
                 className={inputClasses}
               />
             </div>
@@ -101,34 +102,7 @@ const CustomerDetails: React.FC<Props> = ({ details, onChange, isOpen, onToggle 
               />
             </div>
 
-             <div>
-              <label className={labelClasses}>Date</label>
-              <div className="relative">
-                <input 
-                  type="text" 
-                  value={details.date}
-                  onChange={(e) => handleChange('date', e.target.value)}
-                  className={`${inputClasses} pl-3 pr-8`}
-                />
-                <Calendar className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-2.5" />
-              </div>
-            </div>
-            
-            {/* Row 3 */}
-            <div>
-              <label className={labelClasses}>Time</label>
-              <div className="relative">
-                <input 
-                  type="text" 
-                  value={details.time}
-                  onChange={(e) => handleChange('time', e.target.value)}
-                  className={`${inputClasses} pl-3 pr-8`}
-                />
-                <Clock className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-2.5" />
-              </div>
-            </div>
-
-            <div>
+            <div className="md:col-span-2">
               <label className={labelClasses}>Order Type</label>
               <select 
                 value={details.orderType}

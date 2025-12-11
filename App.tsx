@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import CustomerDetails from './components/CustomerDetails';
 import PizzaBuilder from './components/PizzaBuilder';
@@ -9,16 +10,15 @@ import { CustomerDetails as CustomerDetailsType, OrderItem, OrderSummaryState } 
 type Section = 'customer' | 'builder' | 'sides';
 
 const App: React.FC = () => {
-  const [activeSection, setActiveSection] = useState<Section>('customer');
+  const [activeSection, setActiveSection] = useState<Section | null>('customer');
+  const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
 
   const [customer, setCustomer] = useState<CustomerDetailsType>({
-    phone: '(555) 123-4567',
+    eventName: 'Birthday Party',
     store: 'Downtown',
     organization: 'Pizza Palace Inc.',
     contactName: 'Jane Doe',
     email: 'jane.doe@pizzapalace.com',
-    date: '10/27/2023',
-    time: '12:30 PM',
     orderType: 'Delivery'
   });
 
@@ -30,6 +30,7 @@ const App: React.FC = () => {
             description: 'Pepperoni, Mushrooms',
             price: 22.50,
             quantity: 1,
+            deliveryTime: '12:30 PM',
             config: { 
               size: 'Large', 
               crust: 'Thin', 
@@ -46,6 +47,7 @@ const App: React.FC = () => {
             description: 'Pepperoni, Onions',
             price: 18.00,
             quantity: 1,
+            deliveryTime: '1:00 PM',
             config: { 
               size: 'Medium', 
               crust: 'Thin', 
@@ -64,11 +66,40 @@ const App: React.FC = () => {
     tip: 5.00
   });
 
-  const handleAddToOrder = (item: OrderItem) => {
-    setOrderSummary(prev => ({
-      ...prev,
-      items: [...prev.items, item]
-    }));
+  // Unified Save Function (Add or Update)
+  const handleSaveOrder = (item: OrderItem) => {
+    setOrderSummary(prev => {
+      const existingIndex = prev.items.findIndex(i => i.id === item.id);
+      let newItems;
+      
+      if (existingIndex >= 0) {
+        // Update existing
+        newItems = [...prev.items];
+        newItems[existingIndex] = item;
+      } else {
+        // Add new
+        newItems = [...prev.items, item];
+      }
+
+      return {
+        ...prev,
+        items: newItems
+      };
+    });
+
+    // Clear editing state after save
+    setEditingItem(null);
+  };
+
+  const handleEditItem = (item: OrderItem) => {
+    setEditingItem(item);
+    
+    // Determine which section to open based on content
+    if (item.config) {
+        setActiveSection('builder');
+    } else {
+        setActiveSection('sides');
+    }
   };
 
   const handleRemoveItem = (id: string) => {
@@ -76,18 +107,20 @@ const App: React.FC = () => {
         ...prev,
         items: prev.items.filter(item => item.id !== id)
     }));
+    // If we are editing the item that was just deleted, clear edit mode
+    if (editingItem?.id === id) {
+        setEditingItem(null);
+    }
   };
 
   const toggleSection = (section: Section) => {
     if (activeSection === section) {
-      // Optional: Allow closing the current section if clicked again, 
-      // or keep it open. Here we keep it open or toggle. 
-      // Let's allow strictly one open, so clicking active does nothing or closes.
-      // Usually in accordion, clicking active closes it.
-      // But for POS, usually one should be open. Let's keep it open if clicked.
-      return; 
+      setActiveSection(null);
+      // Optional: Clear edit mode if closing the section? 
+      // For now, let's keep it so they can close and re-open to continue editing.
+    } else {
+      setActiveSection(section);
     }
-    setActiveSection(section);
   };
 
   return (
@@ -108,15 +141,19 @@ const App: React.FC = () => {
           />
           
           <PizzaBuilder 
-            onAddToOrder={handleAddToOrder}
+            defaultTime="12:30 PM"
+            onAddToOrder={handleSaveOrder}
             isOpen={activeSection === 'builder'}
             onToggle={() => toggleSection('builder')}
+            itemToEdit={activeSection === 'builder' ? editingItem : null} // Only pass if active to prevent state confusion
           />
 
           <SidesSection 
-            onAddToOrder={handleAddToOrder}
+            defaultTime="12:30 PM"
+            onAddToOrder={handleSaveOrder}
             isOpen={activeSection === 'sides'}
             onToggle={() => toggleSection('sides')}
+            itemToEdit={activeSection === 'sides' ? editingItem : null}
           />
 
           <NotesSection />
@@ -128,6 +165,7 @@ const App: React.FC = () => {
             summary={orderSummary} 
             onUpdate={setOrderSummary}
             onRemoveItem={handleRemoveItem}
+            onEditItem={handleEditItem}
           />
         </div>
       </main>

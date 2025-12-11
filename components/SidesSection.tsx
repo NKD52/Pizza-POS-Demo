@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { ShoppingCart, DollarSign, ChevronDown, UtensilsCrossed, ChevronUp } from 'lucide-react';
+
+import React, { useState, useEffect } from 'react';
+import { ShoppingCart, DollarSign, ChevronDown, UtensilsCrossed, ChevronUp, Clock, RefreshCw } from 'lucide-react';
 import { OrderItem } from '../types';
 
 interface SideItem {
@@ -26,14 +27,49 @@ interface Props {
   onAddToOrder: (item: OrderItem) => void;
   isOpen: boolean;
   onToggle: () => void;
+  defaultTime: string;
+  itemToEdit: OrderItem | null;
 }
 
-const SidesSection: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
+const SidesSection: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle, defaultTime, itemToEdit }) => {
   const [selectedSideId, setSelectedSideId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
   const [customPrice, setCustomPrice] = useState<string>('');
+  const [itemTime, setItemTime] = useState(defaultTime);
 
   const selectedSide = AVAILABLE_SIDES.find(s => s.id === selectedSideId);
+
+  useEffect(() => {
+    // Only reset time if NOT editing
+    if (!itemToEdit) {
+        setItemTime(defaultTime);
+    }
+  }, [defaultTime, itemToEdit]);
+
+  // Hydrate state when editing
+  useEffect(() => {
+    if (itemToEdit && !itemToEdit.config) { // Ensure it's not a pizza
+        // Attempt to find side ID by name similarity if ID isn't preserved directly 
+        // (In a real app, storing sideId in OrderItem would be better, but we can match name)
+        const foundSide = AVAILABLE_SIDES.find(s => itemToEdit.name.includes(s.name));
+        if (foundSide) {
+            setSelectedSideId(foundSide.id);
+        }
+        
+        setQuantity(itemToEdit.quantity);
+        setItemTime(itemToEdit.deliveryTime);
+        
+        // Calculate override
+        const basePrice = foundSide ? foundSide.price * itemToEdit.quantity : 0;
+        if (basePrice > 0 && Math.abs(itemToEdit.price - basePrice) > 0.01) {
+            setCustomPrice(itemToEdit.price.toFixed(2));
+        } else {
+            setCustomPrice('');
+        }
+    } else if (itemToEdit === null) {
+        // Reset (optional cleanup)
+    }
+  }, [itemToEdit]);
 
   const calculatePrice = () => {
     if (!selectedSide) return 0;
@@ -49,12 +85,13 @@ const SidesSection: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
     }
 
     const item: OrderItem = {
-      id: Math.random().toString(36).substr(2, 9),
+      // Use existing ID if editing
+      id: itemToEdit ? itemToEdit.id : Math.random().toString(36).substr(2, 9),
       name: `${quantity}x ${selectedSide.name}`,
       description: selectedSide.category,
       price: finalPrice,
       quantity: quantity,
-      // No config for sides
+      deliveryTime: itemTime || defaultTime,
     };
 
     onAddToOrder(item);
@@ -63,17 +100,19 @@ const SidesSection: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
     setSelectedSideId('');
     setQuantity(1);
     setCustomPrice('');
+    // keep time
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div className={`bg-white rounded-lg shadow-sm border transition-colors overflow-hidden ${itemToEdit ? 'border-orange-300 ring-1 ring-orange-200' : 'border-gray-200'}`}>
       <button 
         onClick={onToggle}
-        className="w-full flex justify-between items-center p-4 bg-white hover:bg-gray-50 transition-colors"
+        className={`w-full flex justify-between items-center p-4 transition-colors ${itemToEdit ? 'bg-orange-50 hover:bg-orange-100' : 'bg-white hover:bg-gray-50'}`}
       >
         <div className="flex items-center gap-2">
-            <UtensilsCrossed className="w-5 h-5 text-gray-700" />
-            <h2 className="text-base font-bold text-gray-900">Sides & Extras</h2>
+            <h2 className={`text-base font-bold ${itemToEdit ? 'text-orange-800' : 'text-gray-900'}`}>
+                {itemToEdit ? 'Edit Side Item' : 'Sides & Extras'}
+            </h2>
         </div>
         {isOpen ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
       </button>
@@ -105,8 +144,22 @@ const SidesSection: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
                 </div>
                 </div>
 
+                {/* Time */}
+                <div className="w-full md:w-28">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">TIME</label>
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            value={itemTime} 
+                            onChange={(e) => setItemTime(e.target.value)}
+                            className="w-full h-10 pl-7 pr-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-red-500 bg-white"
+                        />
+                        <Clock className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-3.5" />
+                    </div>
+                </div>
+
                 {/* Quantity */}
-                <div className="w-full md:w-24">
+                <div className="w-full md:w-16">
                 <label className="block text-xs font-medium text-gray-600 mb-1">QTY</label>
                 <input
                     type="number"
@@ -118,7 +171,7 @@ const SidesSection: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
                 </div>
 
                 {/* Price Override */}
-                <div className="w-full md:w-32">
+                <div className="w-full md:w-24">
                 <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
                     <DollarSign className="w-3 h-3" />
                     OVERRIDE
@@ -142,11 +195,13 @@ const SidesSection: React.FC<Props> = ({ onAddToOrder, isOpen, onToggle }) => {
                 className={`h-10 px-6 rounded-md font-semibold shadow-sm flex items-center gap-2 transition-colors text-sm whitespace-nowrap mb-[1px] ${
                     !selectedSide 
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                    : 'bg-red-600 text-white hover:bg-red-700'
+                    : itemToEdit 
+                        ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                        : 'bg-red-600 text-white hover:bg-red-700'
                 }`}
                 >
-                <ShoppingCart className="w-4 h-4" />
-                Add
+                {itemToEdit ? <RefreshCw className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
+                {itemToEdit ? 'Update' : 'Add'}
                 </button>
             </div>
         </div>
